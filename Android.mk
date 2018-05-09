@@ -64,7 +64,6 @@ LOCAL_SRC_FILES := \
 	hwcutils.cpp \
 	platform.cpp \
 	platformdrmgeneric.cpp \
-	separate_rects.cpp \
 	vsyncworker.cpp
 
 LOCAL_CPPFLAGS += \
