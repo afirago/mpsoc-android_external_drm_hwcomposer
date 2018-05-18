@@ -87,7 +87,13 @@ LOCAL_CPPFLAGS += -DUSE_HISI_IMPORTER
 LOCAL_SRC_FILES += platformhisi.cpp
 LOCAL_C_INCLUDES += device/linaro/hikey/gralloc/
 else
+ifeq ($(TARGET_BOARD_PLATFORM),zynqmp)
+LOCAL_CPPFLAGS += -DUSE_ZYNQMP_IMPORTER
+LOCAL_SRC_FILES += platformzynqmp.cpp
+LOCAL_C_INCLUDES += device/xilinx/common/gralloc/
+else
 LOCAL_CPPFLAGS += -DUSE_DRM_GENERIC_IMPORTER
+endif
 endif
 endif
 
