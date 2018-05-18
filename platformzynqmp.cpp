@@ -1,0 +1,114 @@
+/*
+ * Copyright (C) 2018 Mentor, a Siemens Business
+ * Copyright (C) 2018 Xilinx, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define LOG_TAG "hwc-platform-zynqmp"
+
+#include "platformzynqmp.h"
+#include "drmdevice.h"
+#include "platform.h"
+
+#include <drm/drm_fourcc.h>
+#include <cinttypes>
+#include <stdatomic.h>
+#include <xf86drm.h>
+#include <xf86drmMode.h>
+
+#include <log/log.h>
+#include <hardware/gralloc.h>
+#include "gralloc_priv.h"
+
+
+namespace android {
+
+Importer *Importer::CreateInstance(DrmDevice *drm) {
+  ZynqmpImporter *importer = new ZynqmpImporter(drm);
+  if (!importer)
+    return NULL;
+
+  int ret = importer->Init();
+  if (ret) {
+    ALOGE("Failed to initialize the zynqmp importer %d", ret);
+    delete importer;
+    return NULL;
+  }
+  return importer;
+}
+
+ZynqmpImporter::ZynqmpImporter(DrmDevice *drm) : DrmGenericImporter(drm), drm_(drm) {
+}
+
+ZynqmpImporter::~ZynqmpImporter() {
+}
+
+int ZynqmpImporter::Init() {
+  int ret = hw_get_module(GRALLOC_HARDWARE_MODULE_ID,
+                          (const hw_module_t **)&gralloc_);
+  if (ret) {
+    ALOGE("Failed to open gralloc module %d", ret);
+    return ret;
+  }
+
+  if (strcasecmp(gralloc_->common.author, "ARM Ltd."))
+    ALOGW("Using non-ARM gralloc module: %s/%s\n", gralloc_->common.name,
+          gralloc_->common.author);
+
+  return 0;
+}
+
+int ZynqmpImporter::ImportBuffer(buffer_handle_t handle, hwc_drm_bo_t *bo) {
+  private_handle_t const *hnd = reinterpret_cast < private_handle_t const *>(handle);
+  if (!hnd)
+    return -EINVAL;
+
+  uint32_t gem_handle;
+  int ret = drmPrimeFDToHandle(drm_->fd(), hnd->share_fd, &gem_handle);
+  if (ret) {
+    ALOGE("failed to import prime fd %d ret=%d", hnd->share_fd, ret);
+    return ret;
+  }
+
+  int32_t fmt = ConvertHalFormatToDrm(hnd->format);
+  if (fmt < 0)
+    return fmt;
+
+  memset(bo, 0, sizeof(hwc_drm_bo_t));
+  bo->width = hnd->width;
+  bo->height = hnd->height;
+  bo->hal_format = hnd->format;
+  bo->format = fmt;
+  bo->usage = hnd->usage;
+  bo->pixel_stride = hnd->stride;
+  bo->pitches[0] = hnd->byte_stride;
+  bo->gem_handles[0] = gem_handle;
+  bo->offsets[0] = 0;
+
+  ret = drmModeAddFB2(drm_->fd(), bo->width, bo->height, bo->format,
+                      bo->gem_handles, bo->pitches, bo->offsets, &bo->fb_id, 0);
+  if (ret) {
+    ALOGE("could not create drm fb %d", ret);
+    return ret;
+  }
+
+  return ret;
+}
+
+std::unique_ptr<Planner> Planner::CreateInstance(DrmDevice *) {
+  std::unique_ptr<Planner> planner(new Planner);
+  planner->AddStage<PlanStageGreedy>();
+  return planner;
+}
+} //namespace android
