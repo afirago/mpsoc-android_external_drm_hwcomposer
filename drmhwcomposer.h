@@ -71,6 +71,7 @@ class DrmHwcBuffer {
 
   void Clear();
 
+  int CheckBuffer(buffer_handle_t handle, Importer *importer);
   int ImportBuffer(buffer_handle_t handle, Importer *importer);
 
  private:
@@ -141,6 +142,7 @@ struct DrmHwcLayer {
   OutputFd release_fence;
 
   int ImportBuffer(Importer *importer);
+  int CheckBuffer(Importer *importer);
 
   void SetTransform(int32_t sf_transform);
   void SetSourceCrop(hwc_frect_t const &crop);

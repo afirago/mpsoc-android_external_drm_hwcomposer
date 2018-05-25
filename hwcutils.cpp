@@ -41,6 +41,11 @@ void DrmHwcBuffer::Clear() {
   }
 }
 
+int DrmHwcBuffer::CheckBuffer(buffer_handle_t handle, Importer *importer) {
+  int ret = importer->CheckBuffer(handle);
+  return ret;
+}
+
 int DrmHwcBuffer::ImportBuffer(buffer_handle_t handle, Importer *importer) {
   hwc_drm_bo tmp_bo;
 
@@ -89,6 +94,11 @@ void DrmHwcNativeHandle::Clear() {
     }
     handle_ = NULL;
   }
+}
+
+int DrmHwcLayer::CheckBuffer(Importer *importer) {
+  int ret = buffer.CheckBuffer(sf_handle, importer);
+  return ret;
 }
 
 int DrmHwcLayer::ImportBuffer(Importer *importer) {

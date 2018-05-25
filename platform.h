@@ -38,6 +38,9 @@ class Importer {
   // Creates a platform-specific importer instance
   static Importer *CreateInstance(DrmResources *drm);
 
+  // Checks the buffer referred to by handle
+  virtual int CheckBuffer(buffer_handle_t handle) = 0;
+
   // Imports the buffer referred to by handle into bo.
   //
   // Note: This can be called from a different thread than ReleaseBuffer. The

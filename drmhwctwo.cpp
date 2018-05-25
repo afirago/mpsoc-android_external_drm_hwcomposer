@@ -481,6 +481,7 @@ HWC2::Error DrmHwcTwo::HwcDisplay::CreateComposition(bool test) {
   std::map<uint32_t, DrmHwcTwo::HwcLayer *> z_map;
   for (std::pair<const hwc2_layer_t, DrmHwcTwo::HwcLayer> &l : layers_) {
     HWC2::Composition comp_type;
+    DrmHwcLayer layer;
     if (test)
       comp_type = l.second.sf_type();
     else
@@ -488,8 +489,12 @@ HWC2::Error DrmHwcTwo::HwcDisplay::CreateComposition(bool test) {
 
     switch (comp_type) {
       case HWC2::Composition::Device:
-        z_map.emplace(std::make_pair(l.second.z_order(), &l.second));
-        break;
+        l.second.PopulateDrmLayer(&layer);
+        // Make sure the buffer isn't larger then max res
+        if (!layer.CheckBuffer(importer_.get())) {
+          z_map.emplace(std::make_pair(l.second.z_order(), &l.second));
+          break;
+        }  // else fallthrough to client
       case HWC2::Composition::Client:
         // Place it at the z_order of the highest client layer
         use_client_layer = true;

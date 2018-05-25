@@ -70,6 +70,20 @@ int HisiImporter::Init() {
   return 0;
 }
 
+int HisiImporter::CheckBuffer(buffer_handle_t handle) {
+  private_handle_t const *hnd =
+      reinterpret_cast<private_handle_t const *>(handle);
+  std::pair<uint32_t, uint32_t> max = drm_->max_resolution();
+
+  if (!hnd)
+    return -EINVAL;
+
+  if (hnd->width > max.first || hnd->height > max.second)
+    return -EINVAL;
+
+  return 0;
+}
+
 int HisiImporter::ImportBuffer(buffer_handle_t handle, hwc_drm_bo_t *bo) {
   private_handle_t const *hnd =
       reinterpret_cast<private_handle_t const *>(handle);

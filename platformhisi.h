@@ -34,10 +34,10 @@ class HisiImporter : public DrmGenericImporter {
 
   int Init();
 
+  int CheckBuffer(buffer_handle_t handle) override;
   int ImportBuffer(buffer_handle_t handle, hwc_drm_bo_t *bo) override;
 
  private:
-
   DrmResources *drm_;
 
   const gralloc_module_t *gralloc_;

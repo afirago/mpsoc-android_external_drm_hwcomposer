@@ -83,6 +83,19 @@ uint32_t DrmGenericImporter::ConvertHalFormatToDrm(uint32_t hal_format) {
   }
 }
 
+int DrmGenericImporter::CheckBuffer(buffer_handle_t handle) {
+  gralloc_handle_t *gr_handle = gralloc_handle(handle);
+  std::pair<uint32_t, uint32_t> max = drm_->max_resolution();
+
+  if (!gr_handle)
+    return -EINVAL;
+
+  if (gr_handle->width > max.first || gr_handle->height > max.second)
+    return -EINVAL;
+
+  return 0;
+}
+
 int DrmGenericImporter::ImportBuffer(buffer_handle_t handle, hwc_drm_bo_t *bo) {
   gralloc_handle_t *gr_handle = gralloc_handle(handle);
   if (!gr_handle)
