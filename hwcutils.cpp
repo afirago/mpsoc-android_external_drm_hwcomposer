@@ -64,6 +64,11 @@ int DrmHwcBuffer::ImportBuffer(buffer_handle_t handle, Importer *importer) {
   return 0;
 }
 
+int DrmHwcBuffer::IsRgbBuffer(buffer_handle_t handle, Importer *importer){
+  int ret = importer->IsRgbBuffer(handle);
+  return ret;
+}
+
 int DrmHwcNativeHandle::CopyBufferHandle(buffer_handle_t handle) {
   native_handle_t *handle_copy;
   GraphicBufferMapper &gm(GraphicBufferMapper::get());
@@ -98,6 +103,11 @@ void DrmHwcNativeHandle::Clear() {
 
 int DrmHwcLayer::CheckBuffer(Importer *importer) {
   int ret = buffer.CheckBuffer(sf_handle, importer);
+  return ret;
+}
+
+int DrmHwcLayer::IsRgbBuffer(Importer *importer) {
+  int ret = buffer.IsRgbBuffer(sf_handle, importer);
   return ret;
 }
 

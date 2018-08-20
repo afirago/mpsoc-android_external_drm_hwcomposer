@@ -73,6 +73,7 @@ class DrmHwcBuffer {
 
   int CheckBuffer(buffer_handle_t handle, Importer *importer);
   int ImportBuffer(buffer_handle_t handle, Importer *importer);
+  int IsRgbBuffer(buffer_handle_t handle, Importer *importer);
 
  private:
   hwc_drm_bo bo_;
@@ -143,6 +144,7 @@ struct DrmHwcLayer {
 
   int ImportBuffer(Importer *importer);
   int CheckBuffer(Importer *importer);
+  int IsRgbBuffer(Importer *importer);
 
   void SetTransform(int32_t sf_transform);
   void SetSourceCrop(hwc_frect_t const &crop);

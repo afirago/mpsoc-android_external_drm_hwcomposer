@@ -47,6 +47,9 @@ class Importer {
   //       implementation is responsible for ensuring thread safety.
   virtual int ImportBuffer(buffer_handle_t handle, hwc_drm_bo_t *bo) = 0;
 
+  // Checks if buffer is in RGB format
+  virtual int IsRgbBuffer(buffer_handle_t handle) = 0;
+
   // Releases the buffer object (ie: does the inverse of ImportBuffer)
   //
   // Note: This can be called from a different thread than ImportBuffer. The
@@ -139,5 +142,6 @@ class PlanStageGreedy : public Planner::PlanStage {
                       std::map<size_t, DrmHwcLayer *> &layers, DrmCrtc *crtc,
                       std::vector<DrmPlane *> *planes);
 };
+
 }
 #endif

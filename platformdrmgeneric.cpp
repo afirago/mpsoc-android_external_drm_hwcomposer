@@ -96,6 +96,24 @@ int DrmGenericImporter::CheckBuffer(buffer_handle_t handle) {
   return 0;
 }
 
+int DrmGenericImporter::IsRgbBuffer(buffer_handle_t handle) {
+  gralloc_handle_t *gr_handle = gralloc_handle(handle);
+
+  if (!gr_handle)
+    return -EINVAL;
+
+  switch (gr_handle->format){
+    case HAL_PIXEL_FORMAT_RGB_888:
+    case HAL_PIXEL_FORMAT_BGRA_8888:
+    case HAL_PIXEL_FORMAT_RGBX_8888:
+    case HAL_PIXEL_FORMAT_RGBA_8888:
+    case HAL_PIXEL_FORMAT_RGB_565:
+      return 1;
+    default:
+      return 0;
+  }
+}
+
 int DrmGenericImporter::ImportBuffer(buffer_handle_t handle, hwc_drm_bo_t *bo) {
   gralloc_handle_t *gr_handle = gralloc_handle(handle);
   if (!gr_handle)

@@ -34,6 +34,7 @@ class DrmGenericImporter : public Importer {
   int CheckBuffer(buffer_handle_t handle) override;
   int ImportBuffer(buffer_handle_t handle, hwc_drm_bo_t *bo) override;
   int ReleaseBuffer(hwc_drm_bo_t *bo) override;
+  int IsRgbBuffer(buffer_handle_t handle) override;
 
   uint32_t ConvertHalFormatToDrm(uint32_t hal_format);
  private:
