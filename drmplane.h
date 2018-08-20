@@ -39,6 +39,7 @@ class DrmPlane {
   uint32_t id() const;
 
   bool GetCrtcSupported(const DrmCrtc &crtc) const;
+  bool GetFormatSupported(uint32_t format) const;
 
   uint32_t type() const;
 
@@ -77,6 +78,8 @@ class DrmPlane {
   DrmProperty rotation_property_;
   DrmProperty alpha_property_;
   DrmProperty in_fence_fd_property_;
+
+  std::vector<uint32_t> formats_;
 };
 }
 
