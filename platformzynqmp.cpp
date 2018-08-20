@@ -32,7 +32,7 @@
 #include <hardware/gralloc.h>
 #include "gralloc_priv.h"
 
-
+#define MALI_ALIGN(value, base) (((value) + ((base)-1)) & ~((base)-1))
 namespace android {
 
 Importer *Importer::CreateInstance(DrmResources *drm) {
@@ -70,25 +70,60 @@ int ZynqmpImporter::Init() {
   return 0;
 }
 
-EGLImageKHR ZynqmpImporter::ImportImage(EGLDisplay egl_display, buffer_handle_t handle) {
+int ZynqmpImporter::CheckBuffer(buffer_handle_t handle) {
+  private_handle_t const *hnd =
+      reinterpret_cast<private_handle_t const *>(handle);
+  std::pair<int32_t, int32_t> max = drm_->max_resolution();
+
+  if (!hnd) {
+    ALOGI(" BAD BUFFER");
+    return -EINVAL;
+  }
+
+  if (hnd->width > max.first || hnd->height > max.second){
+    ALOGI(" BAD BUFFER");
+    return -EINVAL;
+  }
+  return 0;
+}
+
+uint32_t ZynqmpImporter::ConvertHalFormatToDrm(uint32_t hal_format) {
+  switch (hal_format) {
+    case HAL_PIXEL_FORMAT_RGB_888:
+      return DRM_FORMAT_BGR888;
+    case HAL_PIXEL_FORMAT_BGRA_8888:
+      return DRM_FORMAT_ARGB8888;
+    case HAL_PIXEL_FORMAT_RGBX_8888:
+      return DRM_FORMAT_XBGR8888;
+    case HAL_PIXEL_FORMAT_RGBA_8888:
+      return DRM_FORMAT_ABGR8888;
+    case HAL_PIXEL_FORMAT_RGB_565:
+      return DRM_FORMAT_BGR565;
+    case HAL_PIXEL_FORMAT_YV12:
+      return DRM_FORMAT_YVU420;
+    case HAL_PIXEL_FORMAT_YCrCb_420_SP:
+      return DRM_FORMAT_NV12;
+    default:
+      ALOGE("Cannot convert hal format to drm format %u", hal_format);
+      return -EINVAL;
+  }
+}
+
+int ZynqmpImporter::IsRgbBuffer(buffer_handle_t handle) {
   private_handle_t const *hnd = reinterpret_cast < private_handle_t const *>(handle);
   if (!hnd)
-    return NULL;
+    return -EINVAL;
 
-  EGLint fmt = ConvertHalFormatToDrm(hnd->format);
-  if (fmt < 0)
-	return NULL;
-
-  EGLint attr[] = {
-    EGL_WIDTH, hnd->width,
-    EGL_HEIGHT, hnd->height,
-    EGL_LINUX_DRM_FOURCC_EXT, fmt,
-    EGL_DMA_BUF_PLANE0_FD_EXT, hnd->share_fd,
-    EGL_DMA_BUF_PLANE0_OFFSET_EXT, 0,
-    EGL_DMA_BUF_PLANE0_PITCH_EXT, hnd->byte_stride,
-    EGL_NONE,
-  };
-  return eglCreateImageKHR(egl_display, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, NULL, attr);
+  switch (hnd->format){
+    case HAL_PIXEL_FORMAT_RGB_888:
+    case HAL_PIXEL_FORMAT_BGRA_8888:
+    case HAL_PIXEL_FORMAT_RGBX_8888:
+    case HAL_PIXEL_FORMAT_RGBA_8888:
+    case HAL_PIXEL_FORMAT_RGB_565:
+      return 1;
+    default:
+      return 0;
+  }
 }
 
 int ZynqmpImporter::ImportBuffer(buffer_handle_t handle, hwc_drm_bo_t *bo) {
@@ -100,12 +135,13 @@ int ZynqmpImporter::ImportBuffer(buffer_handle_t handle, hwc_drm_bo_t *bo) {
   int ret = drmPrimeFDToHandle(drm_->fd(), hnd->share_fd, &gem_handle);
   if (ret) {
     ALOGE("failed to import prime fd %d ret=%d", hnd->share_fd, ret);
+    ALOGE("~~~ fmt=0x%x width=%d height=%d usage=0x%x", hnd->format, hnd->width, hnd->height, hnd->usage);
     return ret;
   }
 
-  EGLint fmt = ConvertHalFormatToDrm(hnd->format);
+  int32_t fmt = ConvertHalFormatToDrm(hnd->format);
   if (fmt < 0)
-	return fmt;
+    return fmt;
 
   memset(bo, 0, sizeof(hwc_drm_bo_t));
   bo->width = hnd->width;
@@ -115,6 +151,53 @@ int ZynqmpImporter::ImportBuffer(buffer_handle_t handle, hwc_drm_bo_t *bo) {
   bo->pitches[0] = hnd->byte_stride;
   bo->gem_handles[0] = gem_handle;
   bo->offsets[0] = 0;
+
+  switch (fmt) {
+    case DRM_FORMAT_YVU420: {
+      int adjusted_height = MALI_ALIGN(hnd->height, 2);
+      int y_size = adjusted_height * hnd->byte_stride;
+      int vu_stride = MALI_ALIGN(hnd->byte_stride / 2, 16);
+      int v_size = vu_stride * (adjusted_height / 2);
+      /* V plane*/
+      bo->gem_handles[1] = gem_handle;
+      bo->pitches[1] = vu_stride;
+      bo->offsets[1] = y_size;
+      /* U plane */
+      bo->gem_handles[2] = gem_handle;
+      bo->pitches[2] = vu_stride;
+      bo->offsets[2] = y_size + v_size;
+      // ALOGI("~~~ bo->pitches[0]=%d", bo->pitches[0]);
+      // ALOGI("~~~ bo->offsets[0]=%d", bo->offsets[0]);      
+      // ALOGI("~~~ bo->pitches[1]=%d", bo->pitches[1]);
+      // ALOGI("~~~ bo->offsets[1]=%d", bo->offsets[1]);
+      // ALOGI("~~~ bo->pitches[2]=%d", bo->pitches[2]);
+      // ALOGI("~~~ bo->offsets[2]=%d", bo->offsets[2]);
+      // ALOGI("~~~ size=%d", hnd->size);
+      break;
+    }
+
+    case DRM_FORMAT_NV12:
+    case DRM_FORMAT_NV21: {
+      /* Y plane*/
+      int adjusted_height = MALI_ALIGN(hnd->height, 2);
+      int y_size = adjusted_height * hnd->byte_stride;
+
+      /* U+V plane*/
+      int vu_stride = MALI_ALIGN(hnd->byte_stride / 2, 16) * 2;
+
+      bo->gem_handles[1] = gem_handle;
+      bo->pitches[1] = vu_stride;
+      bo->offsets[1] = y_size;
+      // ALOGI("~~~ bo->pitches[0]=%d", bo->pitches[0]);
+      // ALOGI("~~~ bo->offsets[0]=%d", bo->offsets[0]);      
+      // ALOGI("~~~ bo->pitches[1]=%d", bo->pitches[1]);
+      // ALOGI("~~~ bo->offsets[1]=%d", bo->offsets[1]);
+      break;
+    }
+    default:
+      break;
+  }
+
 
   ret = drmModeAddFB2(drm_->fd(), bo->width, bo->height, bo->format,
                       bo->gem_handles, bo->pitches, bo->offsets, &bo->fb_id, 0);
@@ -126,11 +209,123 @@ int ZynqmpImporter::ImportBuffer(buffer_handle_t handle, hwc_drm_bo_t *bo) {
   return ret;
 }
 
+bool PlanStageZynqMP::IsYuvHalFormat(uint32_t format){
+  switch (format) {
+    case HAL_PIXEL_FORMAT_YV12:
+    case HAL_PIXEL_FORMAT_YCrCb_420_SP:
+      return true;
+    default:
+      return false;
+  }
+}
+
+int PlanStageZynqMP::ProvisionPlanes(
+    std::vector<DrmCompositionPlane> *composition,
+    std::map<size_t, DrmHwcLayer *> &layers, DrmCrtc *crtc,
+    std::vector<DrmPlane *> *planes) {
+  int ret;
+
+  // if we have only 1 layer, it should go to the primary plane
+  ALOGI("~~~ got %zu layers", layers.size());
+  // Go through YUV layers first
+  for (auto i = layers.begin(); i != layers.end();) {
+
+    private_handle_t const *hnd = reinterpret_cast < private_handle_t const *>(i->second->get_usable_handle());
+    if (!hnd){
+      ALOGW("Bad buffer handle");
+      ++i;
+      continue;
+    }
+
+    // if (!IsYuvHalFormat(hnd->format)) {
+    //   ++i;
+    //   continue;
+    // }
+    // ALOGI("~~~ FOUND YUV");
+    int32_t drm_format = ConvertHalFormatToDrm(hnd->format);
+    if (drm_format < 0){
+      ++i;
+      continue;
+    }
+
+    ret = EmplacePlaneByFormat(composition, planes, DrmCompositionPlane::Type::kLayer, crtc,
+                  i->first, drm_format);
+    // if (ret == -ENOENT)
+    //   break;
+    if (ret)
+      ALOGE("Failed to emplace layer %zu, dropping it", i->first);
+
+    i = layers.erase(i);
+  }
+
+  return 0;
+}
+
+uint32_t PlanStageZynqMP::ConvertHalFormatToDrm(uint32_t hal_format) {
+  switch (hal_format) {
+    case HAL_PIXEL_FORMAT_RGB_888:
+      return DRM_FORMAT_BGR888;
+    case HAL_PIXEL_FORMAT_BGRA_8888:
+      return DRM_FORMAT_ARGB8888;
+    case HAL_PIXEL_FORMAT_RGBX_8888:
+      return DRM_FORMAT_XBGR8888;
+    case HAL_PIXEL_FORMAT_RGBA_8888:
+      return DRM_FORMAT_ABGR8888;
+    case HAL_PIXEL_FORMAT_RGB_565:
+      return DRM_FORMAT_BGR565;
+    case HAL_PIXEL_FORMAT_YV12:
+      return DRM_FORMAT_YVU420;
+    case HAL_PIXEL_FORMAT_YCrCb_420_SP:
+      return DRM_FORMAT_NV12;
+    default:
+      ALOGE("Cannot convert hal format to drm format %u", hal_format);
+      return -EINVAL;
+  }
+}
+
+DrmPlane * PlanStageZynqMP::PopPlaneForFormat(std::vector<DrmPlane *> *planes, int32_t drm_format) {
+  if (planes->empty())
+    return NULL;
+  DrmPlane *plane;
+  
+  for (auto p = planes->begin(); p != planes->end(); ++p) {
+    plane = *p;
+    if (plane->GetFormatSupported(drm_format)){
+      ALOGI("<<< found plane=%d for format=%c%c%c%c", plane->id(),
+        drm_format,
+        drm_format >> 8,
+        drm_format >> 16,
+        drm_format >> 24);
+      planes->erase(p);
+      return plane;
+    }
+  }
+  ALOGI("<<< didn't find plane for format=%c%c%c%c",
+        drm_format,
+        drm_format >> 8,
+        drm_format >> 16,
+        drm_format >> 24);
+  return NULL;
+}
+
+// Inserts the given layer:plane in the composition at the back
+int  PlanStageZynqMP::EmplacePlaneByFormat(std::vector<DrmCompositionPlane> *composition,
+                   std::vector<DrmPlane *> *planes,
+                   DrmCompositionPlane::Type type, DrmCrtc *crtc,
+                   size_t source_layer,
+                   int32_t drm_format) {
+  DrmPlane *plane = PopPlaneForFormat(planes, drm_format);
+  if (!plane)
+    return -ENOENT;
+
+  composition->emplace_back(type, plane, crtc, source_layer);
+  return 0;
+}
+
 std::unique_ptr<Planner> Planner::CreateInstance(DrmResources *) {
   std::unique_ptr<Planner> planner(new Planner);
-  planner->AddStage<PlanStageGreedy>();
+  planner->AddStage<PlanStageZynqMP>();
+  //planner->AddStage<PlanStageGreedy>();
   return planner;
 }
 }
-
-

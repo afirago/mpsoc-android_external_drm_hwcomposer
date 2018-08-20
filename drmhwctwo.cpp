@@ -492,6 +492,8 @@ HWC2::Error DrmHwcTwo::HwcDisplay::CreateComposition(bool test) {
         l.second.PopulateDrmLayer(&layer);
         // Make sure the buffer isn't larger then max res
         if (!layer.CheckBuffer(importer_.get())) {
+          if(test)
+            ALOGI ("~~~ %s:%d sf_type is device", __func__, __LINE__);
           z_map.emplace(std::make_pair(l.second.z_order(), &l.second));
           break;
         }  // else fallthrough to client
@@ -499,6 +501,8 @@ HWC2::Error DrmHwcTwo::HwcDisplay::CreateComposition(bool test) {
         // Place it at the z_order of the highest client layer
         use_client_layer = true;
         client_z_order = std::max(client_z_order, l.second.z_order());
+        if(test)
+          ALOGI ("~~~ %s:%d sf_type is client", __func__, __LINE__);
         break;
       default:
         continue;
@@ -507,8 +511,10 @@ HWC2::Error DrmHwcTwo::HwcDisplay::CreateComposition(bool test) {
   if (use_client_layer)
     z_map.emplace(std::make_pair(client_z_order, &client_layer_));
 
-  if (z_map.empty())
+  if (z_map.empty()){
+    ALOGI ("~~~ %s:%d bad layer", __func__, __LINE__);
     return HWC2::Error::BadLayer;
+  }
 
   // now that they're ordered by z, add them to the composition
   for (std::pair<const uint32_t, DrmHwcTwo::HwcLayer *> &l : z_map) {
@@ -560,6 +566,7 @@ HWC2::Error DrmHwcTwo::HwcDisplay::CreateComposition(bool test) {
   if (ret) {
     if (!test)
       ALOGE("Failed to apply the frame composition ret=%d", ret);
+    ALOGI ("~~~ %s:%d BadParameter", __func__, __LINE__);
     return HWC2::Error::BadParameter;
   }
   return HWC2::Error::None;
@@ -708,10 +715,12 @@ HWC2::Error DrmHwcTwo::HwcDisplay::ValidateDisplay(uint32_t *num_types,
   for (std::pair<const hwc2_layer_t, DrmHwcTwo::HwcLayer> &l : layers_)
     l.second.set_validated_type(HWC2::Composition::Invalid);
 
-  ret = CreateComposition(true);
-  if (ret != HWC2::Error::None)
-    // Assume the test failed due to overlay planes
-    avail_planes = 1;
+  // ret = CreateComposition(true);
+  // if (ret != HWC2::Error::None){
+  //   ALOGI("~~~ CreateComposition(true) failed; ret = %d", ret);
+  //   // Assume the test failed due to overlay planes
+  //   avail_planes = 1;
+  // }
 
   std::map<uint32_t, DrmHwcTwo::HwcLayer *> z_map;
   for (std::pair<const hwc2_layer_t, DrmHwcTwo::HwcLayer> &l : layers_) {
@@ -725,24 +734,36 @@ HWC2::Error DrmHwcTwo::HwcDisplay::ValidateDisplay(uint32_t *num_types,
    */
   if (avail_planes < layers_.size())
     avail_planes--;
+  
+  // for (std::pair<const uint32_t, DrmHwcTwo::HwcLayer *> &l : z_map) {
+  //   if (!avail_planes--)
+  //     break;
+  //   l.second->set_validated_type(HWC2::Composition::Device);
+  // }
 
-  for (std::pair<const uint32_t, DrmHwcTwo::HwcLayer *> &l : z_map) {
-    if (!avail_planes--)
-      break;
-    l.second->set_validated_type(HWC2::Composition::Device);
-  }
+  // all RGB layers will go to 
 
   for (std::pair<const hwc2_layer_t, DrmHwcTwo::HwcLayer> &l : layers_) {
     DrmHwcTwo::HwcLayer &layer = l.second;
+    DrmHwcLayer dl;
+    l.second.PopulateDrmLayer(&dl);
     switch (layer.sf_type()) {
       case HWC2::Composition::Device:
-        if (layer.validated_type() == HWC2::Composition::Device)
-          break;
-      // fall thru
+        // if (layer.validated_type() == HWC2::Composition::Device){
+        //   ALOGI("~~~ setting to Device");
+        //   break;
+        // }
+          if (!dl.CheckBuffer(importer_.get()) && (dl.IsRgbBuffer(importer_.get())==0) ) {
+              layer.set_validated_type(HWC2::Composition::Device);
+              ALOGI("~~~ setting to Device");
+              break;
+          }
+          // fall thru
       case HWC2::Composition::SolidColor:
       case HWC2::Composition::Cursor:
       case HWC2::Composition::Sideband:
       default:
+        ALOGI("~~~ setting to client");
         layer.set_validated_type(HWC2::Composition::Client);
         ++*num_types;
         break;

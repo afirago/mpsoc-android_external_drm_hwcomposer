@@ -35,15 +35,38 @@ class ZynqmpImporter : public DrmGenericImporter {
 
   int Init();
 
-  EGLImageKHR ImportImage(EGLDisplay egl_display, buffer_handle_t handle) override;
+  int CheckBuffer(buffer_handle_t handle) override;
   int ImportBuffer(buffer_handle_t handle, hwc_drm_bo_t *bo) override;
+  int IsRgbBuffer(buffer_handle_t handle) override;
 
+  uint32_t ConvertHalFormatToDrm(uint32_t hal_format);
  private:
 
   DrmResources *drm_;
 
   const gralloc_module_t *gralloc_;
 };
+
+// TODO
+class PlanStageZynqMP : public Planner::PlanStage {
+ private:
+  bool IsYuvHalFormat(uint32_t format);
+ public:
+  int ProvisionPlanes(std::vector<DrmCompositionPlane> *composition,
+                      std::map<size_t, DrmHwcLayer *> &layers, DrmCrtc *crtc,
+                      std::vector<DrmPlane *> *planes);
+  uint32_t ConvertHalFormatToDrm(uint32_t hal_format);
+   protected:
+    // Removes and returns the next available YUV plane from planes
+    DrmPlane *PopPlaneForFormat(std::vector<DrmPlane *> *planes, int32_t drm_format);
+
+    // Inserts the given layer:plane in the composition at the back
+    int EmplacePlaneByFormat(std::vector<DrmCompositionPlane> *composition,
+                       std::vector<DrmPlane *> *planes,
+                       DrmCompositionPlane::Type type, DrmCrtc *crtc,
+                       size_t source_layer, int32_t drm_format);
+};
+
 }
 
 #endif
