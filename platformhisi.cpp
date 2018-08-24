@@ -89,6 +89,7 @@ int HisiImporter::ImportBuffer(buffer_handle_t handle, hwc_drm_bo_t *bo) {
   memset(bo, 0, sizeof(hwc_drm_bo_t));
   bo->width = hnd->width;
   bo->height = hnd->height;
+  bo->hal_format = hnd->req_format;
   bo->format = fmt;
   bo->usage = hnd->usage;
   bo->pitches[0] = hnd->byte_stride;
