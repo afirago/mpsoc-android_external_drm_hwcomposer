@@ -315,7 +315,7 @@ int DrmDisplayCompositor::CommitFrame(DrmDisplayComposition *display_comp,
     hwc_rect_t display_frame;
     hwc_frect_t source_crop;
     uint64_t rotation = 0;
-    uint64_t alpha = 0xFFFF;
+    uint64_t alpha = 0xFF;
 
     if (comp_plane.type() != DrmCompositionPlane::Type::kDisable) {
       if (source_layers.size() > 1) {
