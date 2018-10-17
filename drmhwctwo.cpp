@@ -64,33 +64,35 @@ HWC2::Error DrmHwcTwo::Init() {
     return HWC2::Error::NoResources;
   }
 
-  DrmDevice *drm = resource_manager_.GetDrmDevice(HWC_DISPLAY_PRIMARY);
-  std::shared_ptr<Importer> importer = resource_manager_.GetImporter(
-      HWC_DISPLAY_PRIMARY);
-  if (!drm || !importer) {
-    ALOGE("Failed to get a valid drmresource and importer");
-    return HWC2::Error::NoResources;
-  }
+  for (int disp_idx = 0; disp_idx < resource_manager_.GetDisplaysNumber(); ++disp_idx) {
+    DrmDevice *drm = resource_manager_.GetDrmDevice(disp_idx);
+    std::shared_ptr<Importer> importer = resource_manager_.GetImporter(
+        disp_idx);
+    if (!drm || !importer) {
+      ALOGE("Failed to get a valid drmresource and importer");
+      return HWC2::Error::NoResources;
+    }
 
-  displays_.emplace(std::piecewise_construct,
-                    std::forward_as_tuple(HWC_DISPLAY_PRIMARY),
-                    std::forward_as_tuple(&resource_manager_, drm, importer,
-                                          HWC_DISPLAY_PRIMARY,
-                                          HWC2::DisplayType::Physical));
+    displays_.emplace(std::piecewise_construct,
+                      std::forward_as_tuple(disp_idx),
+                      std::forward_as_tuple(&resource_manager_, drm, importer,
+                                            disp_idx,
+                                            HWC2::DisplayType::Physical));
 
-  DrmCrtc *crtc = drm->GetCrtcForDisplay(static_cast<int>(HWC_DISPLAY_PRIMARY));
-  if (!crtc) {
-    ALOGE("Failed to get crtc for display %d",
-          static_cast<int>(HWC_DISPLAY_PRIMARY));
-    return HWC2::Error::BadDisplay;
-  }
+    DrmCrtc *crtc = drm->GetCrtcForDisplay(static_cast<int>(disp_idx));
+    if (!crtc) {
+      ALOGE("Failed to get crtc for display %d",
+            static_cast<int>(disp_idx));
+      return HWC2::Error::BadDisplay;
+    }
 
-  std::vector<DrmPlane *> display_planes;
-  for (auto &plane : drm->planes()) {
-    if (plane->GetCrtcSupported(*crtc))
-      display_planes.push_back(plane.get());
+    std::vector<DrmPlane *> display_planes;
+    for (auto &plane : drm->planes()) {
+      if (plane->GetCrtcSupported(*crtc))
+        display_planes.push_back(plane.get());
+    }
+    displays_.at(disp_idx).Init(&display_planes);
   }
-  displays_.at(HWC_DISPLAY_PRIMARY).Init(&display_planes);
   return HWC2::Error::None;
 }
 
@@ -137,8 +139,13 @@ HWC2::Error DrmHwcTwo::RegisterCallback(int32_t descriptor,
   switch (callback) {
     case HWC2::Callback::Hotplug: {
       auto hotplug = reinterpret_cast<HWC2_PFN_HOTPLUG>(function);
-      hotplug(data, HWC_DISPLAY_PRIMARY,
-              static_cast<int32_t>(HWC2::Connection::Connected));
+      // Just report all detected display as connected
+      // TODO:
+      //  implement real connect/disconnect handler for every HwcDisplay object
+      for (std::pair<const hwc2_display_t, DrmHwcTwo::HwcDisplay> &d :
+           displays_)
+        hotplug(data, d.first,
+                static_cast<int32_t>(HWC2::Connection::Connected));
       break;
     }
     case HWC2::Callback::Vsync: {
