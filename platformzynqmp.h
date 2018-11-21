@@ -37,6 +37,8 @@ class ZynqmpImporter : public DrmGenericImporter {
 
   int ImportBuffer(buffer_handle_t handle, hwc_drm_bo_t *bo) override;
 
+  bool CanImportBuffer(buffer_handle_t handle);
+
  private:
 
   DrmDevice *drm_;
