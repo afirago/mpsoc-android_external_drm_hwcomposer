@@ -135,6 +135,11 @@ int DrmGenericImporter::ImportBuffer(buffer_handle_t handle, hwc_drm_bo_t *bo) {
   return ret;
 }
 
+bool DrmGenericImporter::CanImportBuffer(buffer_handle_t handle) {
+  (void)(handle);
+  return true;
+}
+
 int DrmGenericImporter::ReleaseBuffer(hwc_drm_bo_t *bo) {
   if (bo->fb_id)
     if (drmModeRmFB(drm_->fd(), bo->fb_id))

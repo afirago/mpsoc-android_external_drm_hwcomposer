@@ -70,6 +70,17 @@ int HisiImporter::Init() {
   return 0;
 }
 
+bool HisiImporter::CanImportBuffer(buffer_handle_t handle) {
+  
+  private_handle_t const *hnd = reinterpret_cast<private_handle_t const *>(
+      handle);
+
+  if (!(hnd->usage & GRALLOC_USAGE_HW_FB))
+    return false;
+
+  return true;
+}
+
 int HisiImporter::ImportBuffer(buffer_handle_t handle, hwc_drm_bo_t *bo) {
   memset(bo, 0, sizeof(hwc_drm_bo_t));
 

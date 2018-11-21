@@ -49,6 +49,9 @@ class Importer {
   // Note: This can be called from a different thread than ImportBuffer. The
   //       implementation is responsible for ensuring thread safety.
   virtual int ReleaseBuffer(hwc_drm_bo_t *bo) = 0;
+
+  // Checks if it can import the buffer referred to by handle.
+  virtual bool CanImportBuffer(buffer_handle_t handle) = 0;
 };
 
 class Planner {
