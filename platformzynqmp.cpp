@@ -100,17 +100,29 @@ static uint32_t ZynqmpConvertHalFormatToDrm(uint32_t hal_format) {
 bool ZynqmpImporter::CanImportBuffer(buffer_handle_t handle) {
   private_handle_t const *hnd = reinterpret_cast<private_handle_t const *>(
       handle);
+  std::pair<uint32_t, uint32_t> max = drm_->max_resolution();
+  std::pair<uint32_t, uint32_t> min = drm_->min_resolution();
+  uint32_t w = hnd->width;
+  uint32_t h = hnd->height;
+  if (w > max.first || h > max.second ||
+      w < min.first || h < min.second) {
+    return false;
+  }
 
   // Camera buffers were allocated from DMA/CMA heap, we can export
-  if (hnd->usage & GRALLOC_USAGE_HW_CAMERA_WRITE) {
+  if (hnd->usage & GRALLOC_USAGE_HW_CAMERA_WRITE)
+    return true;
+
+  // HW FB were allocated from DMA/CMA heap, we can export
+  if (hnd->usage & GRALLOC_USAGE_HW_FB)
+    return true;
+
+  // VCU decoder buffers were allocated from DMA/CMA heap, we can export
+  if (hnd->usage & GRALLOC_USAGE_PRIVATE_2) {
     return true;
   }
 
-  // non-FB buffers were allocated from system heap, cannot export
-  if (!(hnd->usage & GRALLOC_USAGE_HW_FB))
-    return false;
-
-  return true;
+  return false;
 }
 
 int ZynqmpImporter::ImportBuffer(buffer_handle_t handle, hwc_drm_bo_t *bo) {
@@ -123,7 +135,9 @@ int ZynqmpImporter::ImportBuffer(buffer_handle_t handle, hwc_drm_bo_t *bo) {
    * These buffers should be sent to client composition on validate display step
    * after checking with CanImportBuffer()
    */
-  if (!(hnd->usage & GRALLOC_USAGE_HW_FB) && !(hnd->usage & GRALLOC_USAGE_HW_CAMERA_WRITE))
+  if (!(hnd->usage & GRALLOC_USAGE_HW_FB) &&
+      !(hnd->usage & GRALLOC_USAGE_HW_CAMERA_WRITE) &&
+      !(hnd->usage & GRALLOC_USAGE_PRIVATE_2))
     return -EINVAL;
 
   uint32_t gem_handle;
@@ -173,9 +187,18 @@ int ZynqmpImporter::ImportBuffer(buffer_handle_t handle, hwc_drm_bo_t *bo) {
     case DRM_FORMAT_NV21: {
       /* Y plane*/
       int adjusted_height = MALI_ALIGN(hnd->height, 2);
+
+      /* Use height aligned for VCU decoder */
+      if (hnd->usage & GRALLOC_USAGE_PRIVATE_2)
+        adjusted_height = hnd->aligned_height;
+
       int y_size = adjusted_height * hnd->byte_stride;
+
       /* U+V plane */
       int vu_stride = MALI_ALIGN(hnd->byte_stride / 2, 16) * 2;
+      if (hnd->usage & GRALLOC_USAGE_PRIVATE_2)
+        vu_stride = hnd->byte_stride;
+
       bo->gem_handles[1] = gem_handle;
       bo->pitches[1] = vu_stride;
       bo->offsets[1] = y_size;
